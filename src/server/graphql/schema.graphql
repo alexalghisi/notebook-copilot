@@ -1,0 +1,89 @@
+scalar JSON
+
+enum CellType {
+    sql
+    markdown
+}
+
+enum RunStatus {
+    running
+    succeeded
+    failed
+}
+
+type Notebook {
+    id: ID!
+    title: String!
+    createdAt: String!
+    "Cells as they are right now in the live document."
+    cells: [Cell!]!
+    runs(limit: Int = 20): [Run!]!
+}
+
+type Cell {
+    id: ID!
+    type: CellType!
+    source: String!
+    output: OutputSummary
+}
+
+type OutputSummary {
+    runId: ID!
+    status: RunStatus!
+    rowCount: Int
+    error: String
+    durationMs: Int
+}
+
+type Column {
+    name: String!
+    type: String!
+}
+
+type Run {
+    id: ID!
+    notebookId: ID!
+    cellId: ID!
+    source: String!
+    status: RunStatus!
+    columns: [Column!]!
+    "Rows as arrays of values in column order. Numerics are strings to keep their precision."
+    rows: [[JSON]!]!
+    rowCount: Int
+    truncated: Boolean!
+    error: String
+    "1-based character offset of the error in the source, when Postgres reports one."
+    errorPosition: Int
+    durationMs: Int
+    startedAt: String!
+    finishedAt: String
+}
+
+type TableColumn {
+    name: String!
+    type: String!
+    nullable: Boolean!
+    comment: String
+}
+
+type Table {
+    name: String!
+    comment: String
+    rowEstimate: Int!
+    columns: [TableColumn!]!
+}
+
+type Query {
+    notebooks: [Notebook!]!
+    notebook(id: ID!): Notebook
+    run(id: ID!): Run
+    "Tables SQL cells can query."
+    sampleSchema: [Table!]!
+}
+
+type Mutation {
+    "Creates a notebook, optionally from the sample analysis template."
+    createNotebook(title: String!, fromTemplate: Boolean = false): Notebook!
+    "Runs a SQL cell's current source. Collaborators see the result through the document."
+    runCell(notebookId: ID!, cellId: ID!): Run!
+}
