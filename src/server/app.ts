@@ -7,6 +7,9 @@ import { RoomManager } from "./collab/roomManager.ts";
 import { attachCollab } from "./collab/wsServer.ts";
 import type { Config } from "./config.ts";
 import { createPool } from "./db/pool.ts";
+import { RunService } from "./exec/runService.ts";
+import { PostgresSchemaCatalog, type SchemaCatalog } from "./exec/schema.ts";
+import { SqlRunner } from "./exec/sqlRunner.ts";
 import { NotebookRepo } from "./notebooks.ts";
 
 export interface App {
@@ -14,18 +17,23 @@ export interface App {
     serverId: string;
     rooms: RoomManager;
     notebooks: NotebookRepo;
+    runs: RunService;
+    sqlRunner: SqlRunner;
+    schema: SchemaCatalog;
     listen(port: number): Promise<number>;
     close(): Promise<void>;
 }
 
 export interface AppDeps {
     pool?: pg.Pool;
+    samplePool?: pg.Pool;
     bus?: RoomBus;
 }
 
 export function createApp(config: Config, deps: AppDeps = {}): App {
     const serverId = randomUUID();
     const pool = deps.pool ?? createPool(config.databaseUrl);
+    const samplePool = deps.samplePool ?? createPool(config.sampleDatabaseUrl, 8);
     const bus = deps.bus ?? new RedisBus(config.redisUrl);
     const store = new DocStore(pool);
     const notebooks = new NotebookRepo(pool, store);
@@ -38,6 +46,9 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
         idleUnloadMs: config.collab.idleUnloadMs,
         peerSyncTimeoutMs: 150,
     });
+    const sqlRunner = new SqlRunner(samplePool, config.sql);
+    const schema = new PostgresSchemaCatalog(samplePool);
+    const runs = new RunService(pool, rooms, sqlRunner);
 
     const server = createServer((req, res) => {
         handle(req, res).catch((error: unknown) => {
@@ -61,6 +72,9 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
         serverId,
         rooms,
         notebooks,
+        runs,
+        sqlRunner,
+        schema,
         listen(port) {
             return new Promise((resolve) => {
                 server.listen(port, () => {
@@ -75,6 +89,7 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
             await rooms.closeAll();
             if (!deps.bus) await bus.close();
             if (!deps.pool) await pool.end();
+            if (!deps.samplePool) await samplePool.end();
         },
     };
 }
