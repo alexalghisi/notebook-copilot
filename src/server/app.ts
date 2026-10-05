@@ -10,7 +10,9 @@ import { createPool } from "./db/pool.ts";
 import { RunService } from "./exec/runService.ts";
 import { PostgresSchemaCatalog, type SchemaCatalog } from "./exec/schema.ts";
 import { SqlRunner } from "./exec/sqlRunner.ts";
+import { createGraphQL } from "./graphql/yoga.ts";
 import { NotebookRepo } from "./notebooks.ts";
+import { staticHandler } from "./static.ts";
 
 export interface App {
     server: Server;
@@ -50,6 +52,9 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
     const schema = new PostgresSchemaCatalog(samplePool);
     const runs = new RunService(pool, rooms, sqlRunner);
 
+    const yoga = createGraphQL({ notebooks, runs, rooms, schema });
+    const serveStatic = config.staticDir ? staticHandler(config.staticDir) : null;
+
     const server = createServer((req, res) => {
         handle(req, res).catch((error: unknown) => {
             console.error("request failed:", error);
@@ -64,6 +69,11 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
             res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, serverId, rooms: rooms.openRooms }));
             return;
         }
+        if (url.pathname.startsWith("/graphql")) {
+            await yoga.handle(req, res);
+            return;
+        }
+        if (serveStatic && (await serveStatic(req, res))) return;
         res.writeHead(404).end();
     }
 
