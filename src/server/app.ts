@@ -10,6 +10,11 @@ import { createPool } from "./db/pool.ts";
 import { RunService } from "./exec/runService.ts";
 import { PostgresSchemaCatalog, type SchemaCatalog } from "./exec/schema.ts";
 import { SqlRunner } from "./exec/sqlRunner.ts";
+import { CopilotService } from "./copilot/copilotService.ts";
+import type { ChatModel } from "./copilot/model.ts";
+import { OfflineModel } from "./copilot/offline/offlineModel.ts";
+import { OpenAIModel } from "./copilot/openaiModel.ts";
+import { priceFor } from "./copilot/pricing.ts";
 import { createGraphQL } from "./graphql/yoga.ts";
 import { NotebookRepo } from "./notebooks.ts";
 import { staticHandler } from "./static.ts";
@@ -22,6 +27,7 @@ export interface App {
     runs: RunService;
     sqlRunner: SqlRunner;
     schema: SchemaCatalog;
+    copilot: CopilotService;
     listen(port: number): Promise<number>;
     close(): Promise<void>;
 }
@@ -30,6 +36,7 @@ export interface AppDeps {
     pool?: pg.Pool;
     samplePool?: pg.Pool;
     bus?: RoomBus;
+    model?: ChatModel;
 }
 
 export function createApp(config: Config, deps: AppDeps = {}): App {
@@ -51,8 +58,22 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
     const sqlRunner = new SqlRunner(samplePool, config.sql);
     const schema = new PostgresSchemaCatalog(samplePool);
     const runs = new RunService(pool, rooms, sqlRunner);
+    const model =
+        deps.model ??
+        (config.llm ? new OpenAIModel({ baseUrl: config.llm.baseUrl, apiKey: config.llm.apiKey, model: config.llm.model }) : new OfflineModel({ chunkDelayMs: config.copilot.offlineDelayMs }));
+    const copilot = new CopilotService({
+        pool,
+        rooms,
+        schema,
+        runner: sqlRunner,
+        runs,
+        model,
+        price: priceFor(model.name),
+        contextBudget: config.copilot.contextBudget,
+        limits: { maxSteps: config.copilot.maxSteps, maxCostUsd: config.copilot.maxCostUsd },
+    });
 
-    const yoga = createGraphQL({ notebooks, runs, rooms, schema });
+    const yoga = createGraphQL({ notebooks, runs, rooms, schema, copilot });
     const serveStatic = config.staticDir ? staticHandler(config.staticDir) : null;
 
     const server = createServer((req, res) => {
@@ -85,6 +106,7 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
         runs,
         sqlRunner,
         schema,
+        copilot,
         listen(port) {
             return new Promise((resolve) => {
                 server.listen(port, () => {

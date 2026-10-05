@@ -87,3 +87,112 @@ type Mutation {
     "Runs a SQL cell's current source. Collaborators see the result through the document."
     runCell(notebookId: ID!, cellId: ID!): Run!
 }
+
+enum CopilotAction {
+    "Answer a question about the notebook."
+    ask
+    "Write or fix the given cell; ends with a proposed edit."
+    edit
+}
+
+input CopilotInput {
+    notebookId: ID!
+    action: CopilotAction!
+    prompt: String!
+    "The cell to edit, or the cell the question is about."
+    cellId: ID
+}
+
+enum CopilotEventKind {
+    started
+    context
+    step
+    text
+    tool_call
+    tool_result
+    proposal
+    usage
+    done
+}
+
+type ContextItem {
+    kind: String!
+    id: String!
+    tokens: Int!
+    status: String!
+    reason: String!
+}
+
+type Usage {
+    promptTokens: Int!
+    completionTokens: Int!
+    costUsd: Float!
+    "True when the model server didn't report usage and tokens were counted locally."
+    estimated: Boolean!
+}
+
+type DiffLine {
+    kind: String!
+    text: String!
+}
+
+type Proposal {
+    cellId: ID!
+    base: String!
+    proposed: String!
+    explanation: String!
+    diff: [DiffLine!]!
+}
+
+"One streamed step of a copilot request. Which fields are set depends on `kind`."
+type CopilotEvent {
+    kind: CopilotEventKind!
+    requestId: ID!
+    model: String
+    step: Int
+    text: String
+    toolName: String
+    toolArguments: String
+    toolSummary: String
+    isError: Boolean
+    contextTokens: Int
+    contextBudget: Int
+    contextItems: [ContextItem!]
+    proposal: Proposal
+    usage: Usage
+    stopReason: String
+    answer: String
+    error: String
+    latencyMs: Int
+    firstTokenMs: Int
+}
+
+type CopilotRequest {
+    id: ID!
+    action: CopilotAction!
+    cellId: ID
+    prompt: String!
+    model: String!
+    status: String!
+    stopReason: String
+    answer: String
+    proposal: Proposal
+    contextTokens: Int
+    promptTokens: Int
+    completionTokens: Int
+    costUsd: Float
+    steps: Int
+    latencyMs: Int
+    createdAt: String!
+}
+
+extend type Query {
+    copilotRequests(notebookId: ID!, limit: Int = 20): [CopilotRequest!]!
+    "The model copilot requests use: `offline` unless an API key is configured."
+    copilotModel: String!
+}
+
+type Subscription {
+    "Runs a copilot request and streams its progress. Served over SSE (or any GraphQL subscription transport)."
+    copilot(input: CopilotInput!): CopilotEvent!
+}
