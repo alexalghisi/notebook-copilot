@@ -1,9 +1,9 @@
 import { createApp, type App } from "../../src/server/app.ts";
 import { loadConfig, type Config } from "../../src/server/config.ts";
-import { APP_URL, REDIS_URL } from "./env.ts";
+import { APP_URL, READER_URL, REDIS_URL } from "./env.ts";
 
 export function testConfig(overrides: Partial<Config["collab"]> = {}): Config {
-    const config = loadConfig({ DATABASE_URL: APP_URL, REDIS_URL });
+    const config = loadConfig({ DATABASE_URL: APP_URL, SAMPLE_DATABASE_URL: READER_URL, REDIS_URL });
     return { ...config, collab: { flushDelayMs: 10, compactAfterUpdates: 200, idleUnloadMs: 100, ...overrides } };
 }
 
