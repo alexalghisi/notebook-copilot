@@ -85,7 +85,8 @@ function decideEdit(cellId: string, prompt: string, cells: CellBlock[], schema: 
         return call(step, `${repair.note} Running it again.`, "run_query", { sql: repair.sql });
     }
 
-    const rows = /^(\d+) rows?/.exec(lastRun.result)?.[1] ?? "?";
+    const count = /^(\d+) rows?/.exec(lastRun.result)?.[1] ?? "?";
+    const rows = /more rows exist/.test(lastRun.result) ? `more than ${count}` : count;
     const notes = history
         .filter((h) => h.name === "run_query")
         .map((h) => h.note)
