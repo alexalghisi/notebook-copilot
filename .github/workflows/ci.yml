@@ -44,3 +44,6 @@ jobs:
               with:
                   name: eval-report
                   path: evals/out/
+            - run: npx playwright install --with-deps chromium
+            - name: End-to-end (two browsers, two server processes)
+              run: npm run e2e
