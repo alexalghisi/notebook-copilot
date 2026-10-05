@@ -8,3 +8,4 @@ playwright-report/
 *.log
 .env
 evals/out/
+docs/frames/
