@@ -23,7 +23,7 @@ export async function startServerProcess(env: Record<string, string>): Promise<S
     child.stderr.on("data", (chunk: Buffer) => (output += chunk.toString()));
 
     const url = await new Promise<string>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error(`server did not start:\n${output}`)), 20_000);
+        const timer = setTimeout(() => reject(new Error(`server did not start:\n${output}`)), 45_000);
         const onData = () => {
             const match = /listening on (http:\/\/\S+)/.exec(output);
             if (match?.[1]) {

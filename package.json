@@ -20,7 +20,8 @@
         "test": "vitest run",
         "test:watch": "vitest",
         "e2e": "playwright test",
-        "evals": "tsx evals/run.ts"
+        "evals": "tsx evals/run.ts",
+        "bench": "tsx bench/sync.ts"
     },
     "dependencies": {
         "@codemirror/lang-markdown": "^6.5.2",
