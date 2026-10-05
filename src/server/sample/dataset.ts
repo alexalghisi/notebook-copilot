@@ -107,7 +107,8 @@ export function generateSampleData(seed = 7): SampleData {
     const orders: SampleData["orders"] = [];
     const orderItems: SampleData["orderItems"] = [];
     for (let id = 1; id <= 2000; id++) {
-        const customer = customers[Math.floor(random() ** 1.6 * customers.length)]!;
+        // The last 15 customers never order, so "customers without orders" has an answer.
+        const customer = customers[Math.floor(random() ** 1.6 * (customers.length - 15))]!;
         const signup = Date.parse(customer[4]);
         const at = signup + Math.floor(random() * (Date.UTC(2026, 5, 30) - signup));
         orders.push([id, customer[0], new Date(at - (at % 60_000)).toISOString(), pick(random, STATUSES)]);
