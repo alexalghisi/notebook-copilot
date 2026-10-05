@@ -89,11 +89,12 @@ function topN(q: string): number | null {
     return NUMBER_WORDS[raw] ?? Number.parseInt(raw, 10);
 }
 
-const DIM_SQL: Record<Dimension, { expr: string; name: string; needs: Alias }> = {
+// Names aren't unique (two customers can share one), so entity dimensions group by id too.
+const DIM_SQL: Record<Dimension, { expr: string; name: string; needs: Alias; groupBy?: string }> = {
     country: { expr: "c.country", name: "country", needs: "c" },
     category: { expr: "p.category", name: "category", needs: "p" },
-    product: { expr: "p.name", name: "product", needs: "p" },
-    customer: { expr: "c.name", name: "customer", needs: "c" },
+    product: { expr: "p.name", name: "product", needs: "p", groupBy: "p.id, p.name" },
+    customer: { expr: "c.name", name: "customer", needs: "c", groupBy: "c.id, c.name" },
     month: { expr: "date_trunc('month', o.ordered_at)", name: "month", needs: "o" },
     status: { expr: "o.status", name: "status", needs: "o" },
 };
@@ -168,7 +169,7 @@ export function buildSql(plan: QueryPlan): string {
 
     const lines = [`select ${dim ? `${dim.expr} as ${dim.name}, ` : ""}${select}`, ...buildFrom(needs)];
     if (where.length) lines.push(`where ${where.join("\n  and ")}`);
-    if (dim) lines.push(`group by ${dim.expr}`);
+    if (dim) lines.push(`group by ${dim.groupBy ?? dim.expr}`);
     if (dim && plan.order === "dimension") lines.push(`order by ${dim.name}`);
     else if (dim && (plan.order === "measure_desc" || plan.limit)) lines.push(`order by ${measureName} desc`);
     else if (dim) lines.push(`order by ${measureName} desc`);
