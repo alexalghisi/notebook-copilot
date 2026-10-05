@@ -5,7 +5,7 @@ import { createPool } from "../../src/server/db/pool.ts";
 import { NotebookRepo } from "../../src/server/notebooks.ts";
 import { cellSource, findCell, readNotebook } from "../../src/shared/notebook.ts";
 import { connectClient, type CollabClient } from "../helpers/collabClient.ts";
-import { APP_URL, REDIS_URL } from "../helpers/env.ts";
+import { APP_URL, READER_URL, REDIS_URL } from "../helpers/env.ts";
 import { startServerProcess, type ServerProcess } from "../helpers/serverProcess.ts";
 import { waitFor } from "../helpers/waitFor.ts";
 
@@ -15,7 +15,7 @@ let pool: pg.Pool;
 
 beforeAll(async () => {
     pool = createPool(APP_URL, 2);
-    const env = { DATABASE_URL: APP_URL, REDIS_URL, COLLAB_FLUSH_DELAY_MS: "20" };
+    const env = { DATABASE_URL: APP_URL, SAMPLE_DATABASE_URL: READER_URL, REDIS_URL, COLLAB_FLUSH_DELAY_MS: "20" };
     servers = await Promise.all([startServerProcess(env), startServerProcess(env)]);
 });
 
