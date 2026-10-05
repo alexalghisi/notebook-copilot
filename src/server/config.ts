@@ -14,6 +14,7 @@ export interface Config {
     llm: LlmConfig | null;
     sql: { statementTimeoutMs: number; rowLimit: number };
     collab: { flushDelayMs: number; compactAfterUpdates: number; idleUnloadMs: number };
+    copilot: { contextBudget: number; maxSteps: number; maxCostUsd: number; offlineDelayMs: number };
 }
 
 function int(value: string | undefined, fallback: number): number {
@@ -46,6 +47,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
             flushDelayMs: int(env.COLLAB_FLUSH_DELAY_MS, 50),
             compactAfterUpdates: int(env.COLLAB_COMPACT_AFTER, 200),
             idleUnloadMs: int(env.COLLAB_IDLE_UNLOAD_MS, 10_000),
+        },
+        copilot: {
+            contextBudget: int(env.COPILOT_CONTEXT_BUDGET, 3_000),
+            maxSteps: int(env.COPILOT_MAX_STEPS, 6),
+            maxCostUsd: Number(env.COPILOT_MAX_COST_USD ?? "0.05"),
+            // The offline model answers instantly; a small delay per word makes streaming visible in the UI.
+            offlineDelayMs: int(env.OFFLINE_MODEL_DELAY_MS, 12),
         },
     };
 }
