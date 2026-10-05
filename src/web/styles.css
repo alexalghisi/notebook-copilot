@@ -152,6 +152,7 @@ button.link {
 }
 
 .cell {
+    scroll-margin-top: 64px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 8px;
