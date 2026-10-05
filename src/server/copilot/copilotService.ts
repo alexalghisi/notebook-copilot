@@ -2,15 +2,10 @@ import type pg from "pg";
 import { readNotebook } from "../../shared/notebook.ts";
 import type { Proposal } from "../../shared/proposal.ts";
 import type { RoomManager } from "../collab/roomManager.ts";
-import type { SchemaCatalog } from "../exec/schema.ts";
-import type { QueryRunner } from "../exec/sqlRunner.ts";
-import { runAgent, type AgentEvent, type AgentLimits, type AgentResult } from "./agent.ts";
-import { buildContext, type ContextItemReport } from "./context.ts";
-import type { ChatModel } from "./model.ts";
-import type { Price } from "./pricing.ts";
-import { SYSTEM_PROMPT, userMessage, type CopilotAction } from "./prompts.ts";
-import { countTokens } from "./tokens.ts";
-import { TOOL_SPECS, executeTool, type RunLookup } from "./tools.ts";
+import type { AgentResult } from "./agent.ts";
+import type { ContextItemReport } from "./context.ts";
+import type { CopilotAction } from "./prompts.ts";
+import { runSession, type SessionDeps, type SessionEvent } from "./session.ts";
 
 export interface CopilotInput {
     notebookId: string;
@@ -21,24 +16,14 @@ export interface CopilotInput {
 
 export type CopilotEvent =
     | { kind: "started"; requestId: string; model: string }
-    | { kind: "context"; tokens: number; budgetTokens: number; items: ContextItemReport[] }
-    | AgentEvent
+    | SessionEvent
     | { kind: "done"; requestId: string; result: AgentResult; latencyMs: number; firstTokenMs: number | null };
 
 export class CopilotInputError extends Error {}
 
-export interface CopilotDeps {
+export interface CopilotDeps extends SessionDeps {
     pool: pg.Pool;
     rooms: RoomManager;
-    schema: SchemaCatalog;
-    runner: QueryRunner;
-    runs: RunLookup;
-    model: ChatModel;
-    price: Price;
-    limits?: Partial<AgentLimits>;
-    /** Tokens available to the notebook context, after the system prompt and the task. */
-    contextBudget: number;
-    previewRows?: number;
 }
 
 export interface CopilotRequestRow {
@@ -93,47 +78,21 @@ export class CopilotService {
         let contextTokens = 0;
         let contextItems: ContextItemReport[] = [];
         try {
-            const tables = await this.deps.schema.tables();
-            const taskTokens = countTokens(userMessage(input.action, prompt, input.cellId, ""));
-            const packed = buildContext({
-                notebook,
-                focusCellId: input.cellId,
-                prompt,
-                tables,
-                budgetTokens: Math.max(0, this.deps.contextBudget - taskTokens),
-            });
-            contextTokens = packed.tokens;
-            contextItems = packed.items;
-            yield { kind: "context", tokens: packed.tokens, budgetTokens: packed.budgetTokens, items: packed.items };
-
-            const agent = runAgent({
-                model: this.deps.model,
-                price: this.deps.price,
-                messages: [
-                    { role: "system", content: SYSTEM_PROMPT },
-                    { role: "user", content: userMessage(input.action, prompt, input.cellId, packed.text) },
-                ],
-                tools: TOOL_SPECS,
-                executeTool: (call) =>
-                    executeTool(call, {
-                        notebookId: input.notebookId,
-                        notebook,
-                        schema: this.deps.schema,
-                        runner: this.deps.runner,
-                        runs: this.deps.runs,
-                        previewRows: this.deps.previewRows ?? 20,
-                    }),
-                ...(this.deps.limits ? { limits: this.deps.limits } : {}),
-                ...(signal ? { signal } : {}),
-            });
+            const session = runSession(this.deps, { notebookId: input.notebookId, notebook, action: input.action, prompt, cellId: input.cellId }, signal);
             for (;;) {
-                const next = await agent.next();
+                const next = await session.next();
                 if (next.done) {
                     result = next.value;
                     break;
                 }
-                if (next.value.type === "text" && firstTokenMs === null) firstTokenMs = Math.round(performance.now() - started);
-                yield next.value;
+                const event = next.value;
+                if ("kind" in event) {
+                    contextTokens = event.tokens;
+                    contextItems = event.items;
+                } else if (event.type === "text" && firstTokenMs === null) {
+                    firstTokenMs = Math.round(performance.now() - started);
+                }
+                yield event;
             }
         } finally {
             const latencyMs = Math.round(performance.now() - started);

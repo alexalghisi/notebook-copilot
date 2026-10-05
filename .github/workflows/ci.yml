@@ -1,0 +1,46 @@
+name: ci
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+
+jobs:
+    test:
+        runs-on: ubuntu-latest
+        services:
+            postgres:
+                image: postgres:16
+                env:
+                    POSTGRES_PASSWORD: postgres
+                ports: ["5432:5432"]
+                options: >-
+                    --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+            redis:
+                image: redis:7
+                ports: ["6379:6379"]
+                options: >-
+                    --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+        env:
+            ADMIN_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+            TEST_ADMIN_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+            DATABASE_URL: postgres://postgres:postgres@localhost:5432/dn_app
+            SAMPLE_DATABASE_URL: postgres://dn_reader:dn_reader@localhost:5432/dn_sample
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+            - run: npm ci
+            - run: npm run typecheck
+            - run: npm run lint
+            - run: npm run db:setup
+            - run: npm test
+            - name: Evals (offline model)
+              run: npm run evals -- --min-pass 0.85
+            - uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: eval-report
+                  path: evals/out/
